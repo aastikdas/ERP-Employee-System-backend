@@ -1,0 +1,163 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum LeaveType {
+  SICK
+  CASUAL
+  EARNED
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  HALF_DAY
+}
+
+enum PayrollStatus {
+  PENDING
+  PAID
+}
+
+model User {
+  id              Int          @id @default(autoincrement())
+  email           String       @unique
+  password        String
+  firstName       String
+  lastName        String
+  phone           String?
+  address         String?
+  dob             DateTime?
+  dateOfJoining   DateTime     @default(now())
+  role            Role         @default(EMPLOYEE)
+  status          Status       @default(ACTIVE)
+  baseSalary      Float        @default(0.0)
+  avatar          String?
+  
+  // Relations
+  departmentId    Int?
+  department      Department?  @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+  
+  managerId       Int?
+  manager         User?        @relation("UserManager", fields: [managerId], references: [id])
+  subordinates    User[]       @relation("UserManager")
+  
+  managedDepartment Department? @relation("DepartmentManager")
+  
+  leaves          Leave[]      @relation("EmployeeLeaves")
+  approvedLeaves  Leave[]      @relation("ApprovedLeaves")
+  
+  attendances     Attendance[]
+  
+  payrolls        Payroll[]    @relation("EmployeePayrolls")
+  processedPayrolls Payroll[]  @relation("ProcessedPayrolls")
+  notifications   Notification[]
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  
+  managerId   Int?     @unique
+  manager     User?    @relation("DepartmentManager", fields: [managerId], references: [id])
+  
+  employees   User[]   @relation("DepartmentEmployees")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Leave {
+  id           Int         @id @default(autoincrement())
+  employeeId   Int
+  employee     User        @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate    DateTime
+  endDate      DateTime
+  type         LeaveType
+  status       LeaveStatus @default(PENDING)
+  reason       String
+  
+  approvedById Int?
+  approvedBy   User?       @relation("ApprovedLeaves", fields: [approvedById], references: [id])
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Attendance {
+  id         Int              @id @default(autoincrement())
+  employeeId Int
+  employee   User             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime         // Stored as date-only representation (midnight UTC/local)
+  clockIn    DateTime
+  clockOut   DateTime?
+  status     AttendanceStatus @default(PRESENT)
+  remarks    String?
+  
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([employeeId, date])
+}
+
+model Payroll {
+  id            Int           @id @default(autoincrement())
+  employeeId    Int
+  employee      User          @relation("EmployeePayrolls", fields: [employeeId], references: [id], onDelete: Cascade)
+  month         Int           // 1-12
+  year          Int
+  baseSalary    Float
+  allowances    Float         @default(0)
+  deductions    Float         @default(0)
+  netSalary     Float
+  status        PayrollStatus @default(PENDING)
+  paymentDate   DateTime?
+  
+  processedById Int
+  processedBy   User          @relation("ProcessedPayrolls", fields: [processedById], references: [id])
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([employeeId, month, year])
+}
